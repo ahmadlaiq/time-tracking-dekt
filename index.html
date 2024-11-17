@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Time Tracker</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+      }
+      .login-container {
+        max-width: 400px;
+        margin: 40px auto;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .timer {
+        font-size: 2em;
+        margin: 20px;
+      }
+      .controls {
+        margin: 20px;
+      }
+      .session-info {
+        margin: 20px;
+        padding: 10px;
+        border: 1px solid #ccc;
+      }
+      .screenshot {
+        max-width: 300px;
+        margin: 10px;
+      }
+      .error {
+        color: red;
+        margin: 10px;
+      }
+      .success {
+        color: green;
+        margin: 10px;
+      }
+      .status {
+        margin: 10px;
+        font-size: 0.9em;
+        color: #666;
+      }
+      .screenshot-count {
+        font-weight: bold;
+        color: #333;
+      }
+      .task-select {
+        margin: 20px;
+        padding: 10px;
+        width: 200px;
+      }
+      .user-info {
+        margin: 20px;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 4px;
+      }
+      button {
+        padding: 8px 16px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
+        background-color: #4caf50;
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .logout-btn {
+        background-color: #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Login Form -->
+      <div v-if="!isLoggedIn" class="login-container">
+        <h2>Login</h2>
+        <div class="form-group">
+          <label>Email:</label>
+          <input type="email" v-model="loginForm.email" />
+        </div>
+        <div class="form-group">
+          <label>Password:</label>
+          <input type="password" v-model="loginForm.password" />
+        </div>
+        <button @click="login">Login</button>
+        <div v-if="error" class="error">{{ error }}</div>
+      </div>
+
+      <!-- Main App -->
+      <div v-else>
+        <!-- User Info -->
+        <div class="user-info">
+          <h3>Welcome, {{ user.name }}</h3>
+          <button class="logout-btn" @click="logout">Logout</button>
+        </div>
+
+        <!-- Task Selection -->
+        <select v-model="selectedTask" class="task-select">
+          <option value="">Select Task</option>
+          <option v-for="task in user.task" :key="task.id" :value="task">
+            {{ task.name }}
+          </option>
+        </select>
+
+        <div class="timer">{{ formatTime }}</div>
+        <div class="controls">
+          <button @click="startTimer" :disabled="isRunning || !selectedTask">
+            Start
+          </button>
+          <button @click="stopTimer" :disabled="!isRunning">Stop</button>
+          <button @click="resetTimer">Reset</button>
+        </div>
+
+        <div v-if="error" class="error">{{ error }}</div>
+
+        <div class="session-info" v-if="currentSession">
+          <h3>Current Session</h3>
+          <p>Session ID: {{ currentSession.id }}</p>
+          <p>Task: {{ selectedTask.name }}</p>
+          <p>Duration: {{ formatDuration(time) }}</p>
+        </div>
+
+        <div v-if="sessions.length > 0">
+          <h3>Session History:</h3>
+          <div
+            v-for="(session, index) in sessions"
+            :key="session.id"
+            class="session-info"
+          >
+            <p>Session {{index + 1}}</p>
+            <p>Task: {{ session.taskName }}</p>
+            <p>Duration: {{ formatDuration(session.duration) }}</p>
+            <div v-if="session.screenshots && session.screenshots.length">
+              <p>Screenshots: {{ session.screenshots.length }}</p>
+              <img
+                v-for="screenshot in session.screenshots"
+                :key="screenshot.id"
+                :src="`http://139.59.249.111:3000/${screenshot.path}`"
+                class="screenshot"
+                @error="handleImageError"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+      const API_URL = process.env.API_URL;
+      const app = Vue.createApp({
+        data() {
+          return {
+            loginForm: {
+              email: "",
+              password: "",
+            },
+            isLoggedIn: false,
+            user: null,
+            token: null,
+            selectedTask: null,
+            time: 0,
+            timer: null,
+            isRunning: false,
+            sessions: [],
+            currentSession: null,
+            screenshotInterval: null,
+            error: null,
+            pendingScreenshots: new Map(),
+          };
+        },
+        created() {
+          // Check for stored authentication
+          const storedAuth = localStorage.getItem("auth");
+          if (storedAuth) {
+            const auth = JSON.parse(storedAuth);
+            this.user = auth.user;
+            this.token = auth.token;
+            this.isLoggedIn = true;
+          }
+        },
+        computed: {
+          formatTime() {
+            const hours = Math.floor(this.time / 3600);
+            const minutes = Math.floor((this.time % 3600) / 60);
+            const seconds = this.time % 60;
+            return `${String(hours).padStart(2, "0")}:${String(
+              minutes
+            ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+          },
+        },
+        methods: {
+          async login() {
+            try {
+              const response = await fetch(
+                `${API_URL}/api/v1/login`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(this.loginForm),
+                }
+              );
+
+              const result = await response.json();
+
+              if (result.success) {
+                this.user = result.data.user;
+                this.token = result.data.token;
+                this.isLoggedIn = true;
+                this.error = null;
+
+                // Store authentication
+                localStorage.setItem(
+                  "auth",
+                  JSON.stringify({
+                    user: this.user,
+                    token: this.token,
+                  })
+                );
+              } else {
+                this.error = result.message;
+              }
+            } catch (error) {
+              this.error = "Login failed: " + error.message;
+              console.error("Login error:", error);
+            }
+          },
+          logout() {
+            this.isLoggedIn = false;
+            this.user = null;
+            this.token = null;
+            this.selectedTask = null;
+            localStorage.removeItem("auth");
+            this.resetTimer();
+          },
+          async startTimer() {
+            if (!this.isRunning && this.selectedTask) {
+              try {
+                const response = await fetch(
+                  `${API_URL}/api/v1/track-time`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${this.token}`,
+                    },
+                    body: JSON.stringify({
+                      duration: 0,
+                      taskId: this.selectedTask.id,
+                      userId: this.user.id,
+                    }),
+                  }
+                );
+
+                const session = await response.json();
+                this.currentSession = session;
+
+                this.isRunning = true;
+                this.error = null;
+
+                this.timer = setInterval(() => {
+                  this.time++;
+                }, 1000);
+
+                // Ambil screenshot setiap 30 detik
+                this.screenshotInterval = setInterval(async () => {
+                  await this.takeScreenshot();
+                }, 30000); // 30 detik
+              } catch (error) {
+                this.error = "Failed to start session: " + error.message;
+                console.error("Error starting session:", error);
+              }
+            }
+          },
+          async stopTimer() {
+            if (this.isRunning) {
+              try {
+                clearInterval(this.timer);
+                clearInterval(this.screenshotInterval);
+
+                await fetch(`${API_URL}/api/v1/track-time`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${this.token}`,
+                  },
+                  body: JSON.stringify({
+                    id: this.currentSession.id,
+                    duration: this.time,
+                    taskId: this.selectedTask.id,
+                    userId: this.user.id,
+                  }),
+                });
+
+                // Ambil screenshot terakhir
+                await this.takeScreenshot();
+
+                this.sessions.unshift({
+                  ...this.currentSession,
+                  duration: this.time,
+                });
+
+                this.isRunning = false;
+                this.currentSession = null;
+                this.error = null;
+              } catch (error) {
+                this.error = "Failed to stop session: " + error.message;
+                console.error("Error stopping session:", error);
+              }
+            }
+          },
+          resetTimer() {
+            this.time = 0;
+            this.currentSession = null;
+            this.error = null;
+          },
+          formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours}h ${minutes}m ${secs}s`;
+          },
+          async takeScreenshot() {
+            if (!this.currentSession) return;
+
+            try {
+              await ipcRenderer.invoke(
+                "capture-screenshot",
+                this.currentSession.id
+              );
+            } catch (error) {
+              console.error("Failed to take screenshot:", error);
+              this.error = "Failed to take screenshot: " + error.message;
+            }
+          },
+          handleImageError(event) {
+            event.target.style.display = "none";
+          },
+        },
+      });
+
+      app.mount("#app");
+    </script>
+  </body>
+</html>
