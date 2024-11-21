@@ -1,155 +1,116 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Time Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 20px;
-      }
-      .login-container {
-        max-width: 400px;
-        margin: 40px auto;
-        padding: 20px;
-        border: 1px solid #ccc;
-        border-radius: 8px;
-      }
-      .form-group {
-        margin-bottom: 15px;
-      }
-      .form-group label {
-        display: block;
-        margin-bottom: 5px;
-      }
-      .form-group input {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-      .timer {
-        font-size: 2em;
-        margin: 20px;
-      }
-      .controls {
-        margin: 20px;
-      }
-      .session-info {
-        margin: 20px;
-        padding: 10px;
-        border: 1px solid #ccc;
-      }
-      .screenshot {
-        max-width: 300px;
-        margin: 10px;
-      }
-      .error {
-        color: red;
-        margin: 10px;
-      }
-      .success {
-        color: green;
-        margin: 10px;
-      }
-      .status {
-        margin: 10px;
-        font-size: 0.9em;
-        color: #666;
-      }
-      .screenshot-count {
-        font-weight: bold;
-        color: #333;
-      }
-      .task-select {
-        margin: 20px;
-        padding: 10px;
-        width: 200px;
-      }
-      .user-info {
-        margin: 20px;
-        padding: 10px;
-        background: #f5f5f5;
-        border-radius: 4px;
-      }
-      button {
-        padding: 8px 16px;
-        margin: 5px;
-        border: none;
-        border-radius: 4px;
-        background-color: #4caf50;
-        color: white;
-        cursor: pointer;
-      }
-      button:disabled {
-        background-color: #cccccc;
-        cursor: not-allowed;
-      }
-      .logout-btn {
-        background-color: #f44336;
-      }
-    </style>
   </head>
-  <body>
+  <body class="font-sans p-5 bg-gray-100">
     <div id="app">
       <!-- Login Form -->
-      <div v-if="!isLoggedIn" class="login-container">
-        <h2>Login</h2>
-        <div class="form-group">
-          <label>Email:</label>
-          <input type="email" v-model="loginForm.email" />
+      <div
+        v-if="!isLoggedIn"
+        class="max-w-md mx-auto mt-10 p-6 bg-white shadow-md rounded-md"
+      >
+        <h2 class="text-2xl font-bold mb-4">Login</h2>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Email:</label>
+          <input
+            type="email"
+            v-model="loginForm.email"
+            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-        <div class="form-group">
-          <label>Password:</label>
-          <input type="password" v-model="loginForm.password" />
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Password:</label>
+          <input
+            type="password"
+            v-model="loginForm.password"
+            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-        <button @click="login">Login</button>
-        <div v-if="error" class="error">{{ error }}</div>
+        <button
+          @click="login"
+          class="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition"
+        >
+          Login
+        </button>
+        <div v-if="error" class="text-red-500 mt-4">{{ error }}</div>
       </div>
 
       <!-- Main App -->
       <div v-else>
         <!-- User Info -->
-        <div class="user-info">
-          <h3>Welcome, {{ user.name }}</h3>
-          <button class="logout-btn" @click="logout">Logout</button>
+        <div class="bg-white p-4 shadow-md rounded-md mb-4">
+          <h3 class="text-lg font-bold">Welcome, {{ user.name }}</h3>
+          <button
+            @click="logout"
+            class="mt-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition"
+          >
+            Logout
+          </button>
         </div>
 
         <!-- Task Selection -->
-        <select v-model="selectedTask" class="task-select">
+        <select
+          v-model="selectedTask"
+          class="block w-52 mx-auto p-2 border border-gray-300 rounded-md mb-6"
+        >
           <option value="">Select Task</option>
           <option v-for="task in user.task" :key="task.id" :value="task">
             {{ task.name }}
           </option>
         </select>
 
-        <div class="timer">{{ formatTime }}</div>
-        <div class="controls">
-          <button @click="startTimer" :disabled="isRunning || !selectedTask">
+        <div class="text-center text-4xl font-bold mb-6">{{ formatTime }}</div>
+        <div class="flex justify-center space-x-4 mb-6">
+          <button
+            @click="startTimer"
+            :disabled="isRunning || !selectedTask"
+            class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
             Start
           </button>
-          <button @click="stopTimer" :disabled="!isRunning">Stop</button>
-          <button @click="resetTimer">Reset</button>
+          <button
+            @click="pauseTimer"
+            :disabled="!isRunning || isPaused"
+            class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Pause
+          </button>
+          <button
+            @click="stopTimer"
+            :disabled="!isRunning"
+            class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Stop
+          </button>
         </div>
 
-        <div v-if="error" class="error">{{ error }}</div>
+        <div v-if="error" class="text-red-500 text-center">{{ error }}</div>
 
-        <div class="session-info" v-if="currentSession">
-          <h3>Current Session</h3>
+        <!-- Current Session -->
+        <div
+          v-if="currentSession"
+          class="bg-white p-4 shadow-md rounded-md mb-6"
+        >
+          <h3 class="text-lg font-bold">Current Session</h3>
           <p>Session ID: {{ currentSession.id }}</p>
           <p>Task: {{ selectedTask.name }}</p>
           <p>Duration: {{ formatDuration(time) }}</p>
         </div>
 
+        <!-- Session History -->
         <div v-if="sessions.length > 0">
-          <h3>Session History:</h3>
+          <h3 class="text-xl font-bold mb-4">Session History:</h3>
           <div
             v-for="(session, index) in sessions"
             :key="session.id"
-            class="session-info"
+            class="bg-white p-4 shadow-md rounded-md mb-4"
           >
-            <p>Session {{index + 1}}</p>
+            <p>Session {{ index + 1 }}</p>
             <p>Task: {{ session.taskName }}</p>
             <p>Duration: {{ formatDuration(session.duration) }}</p>
             <div v-if="session.screenshots && session.screenshots.length">
@@ -158,7 +119,7 @@
                 v-for="screenshot in session.screenshots"
                 :key="screenshot.id"
                 :src="`http://139.59.249.111:3000/${screenshot.path}`"
-                class="screenshot"
+                class="w-48 h-auto mt-2"
                 @error="handleImageError"
               />
             </div>
@@ -184,11 +145,11 @@
             time: 0,
             timer: null,
             isRunning: false,
+            isPaused: false,
             sessions: [],
             currentSession: null,
             screenshotInterval: null,
             error: null,
-            pendingScreenshots: new Map(),
           };
         },
         created() {
@@ -214,16 +175,13 @@
         methods: {
           async login() {
             try {
-              const response = await fetch(
-                `${API_URL}/api/v1/login`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(this.loginForm),
-                }
-              );
+              const response = await fetch(`${API_URL}/api/v1/login`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(this.loginForm),
+              });
 
               const result = await response.json();
 
@@ -260,26 +218,24 @@
           async startTimer() {
             if (!this.isRunning && this.selectedTask) {
               try {
-                const response = await fetch(
-                  `${API_URL}/api/v1/track-time`,
-                  {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${this.token}`,
-                    },
-                    body: JSON.stringify({
-                      duration: 0,
-                      taskId: this.selectedTask.id,
-                      userId: this.user.id,
-                    }),
-                  }
-                );
+                const response = await fetch(`${API_URL}/api/v1/track-time`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${this.token}`,
+                  },
+                  body: JSON.stringify({
+                    duration: 0,
+                    taskId: this.selectedTask.id,
+                    userId: this.user.id,
+                  }),
+                });
 
                 const session = await response.json();
                 this.currentSession = session;
 
                 this.isRunning = true;
+                this.isPaused = false;
                 this.error = null;
 
                 this.timer = setInterval(() => {
@@ -296,8 +252,17 @@
               }
             }
           },
+          pauseTimer() {
+            if (this.isRunning && !this.isPaused) {
+              clearInterval(this.timer);
+              clearInterval(this.screenshotInterval);
+              this.isPaused = true;
+            }
+          },
           async stopTimer() {
-            if (this.isRunning) {
+            if (this.isRunning || this.isPaused) {
+              this.isRunning = false;
+              this.isPaused = false;
               try {
                 clearInterval(this.timer);
                 clearInterval(this.screenshotInterval);
@@ -332,11 +297,6 @@
                 console.error("Error stopping session:", error);
               }
             }
-          },
-          resetTimer() {
-            this.time = 0;
-            this.currentSession = null;
-            this.error = null;
           },
           formatDuration(seconds) {
             const hours = Math.floor(seconds / 3600);
