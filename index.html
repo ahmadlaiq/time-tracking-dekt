@@ -118,7 +118,7 @@
               <img
                 v-for="screenshot in session.screenshots"
                 :key="screenshot.id"
-                :src="`http://139.59.249.111:3000/${screenshot.path}`"
+                :src="`http://127.0.0.1:3000/${screenshot.path}`"
                 class="w-48 h-auto mt-2"
                 @error="handleImageError"
               />
