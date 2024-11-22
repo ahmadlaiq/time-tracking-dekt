@@ -156,7 +156,7 @@
             lastActivity: Date.now(),
             afkCheckInterval: null,
             showAfkAlert: false,
-            AFK_TIMEOUT: 30000
+            AFK_TIMEOUT: 3 * 60 * 1000, // 3 minutes in milliseconds
           };
         },
         created() {
