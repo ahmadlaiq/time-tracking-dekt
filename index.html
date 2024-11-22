@@ -57,6 +57,7 @@
         <select
           v-model="selectedTask"
           class="block w-52 mx-auto p-2 border border-gray-300 rounded-md mb-6"
+          :disabled="isRunning || isPaused"
         >
           <option value="">Select Task</option>
           <option v-for="task in user.task" :key="task.id" :value="task">
@@ -64,11 +65,12 @@
           </option>
         </select>
 
+        <!-- Timer Display -->
         <div class="text-center text-4xl font-bold mb-6">{{ formatTime }}</div>
         <div class="flex justify-center space-x-4 mb-6">
           <button
             @click="startTimer"
-            :disabled="isRunning || !selectedTask"
+            :disabled="isRunning || !selectedTask || isPaused"
             class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Start
@@ -98,8 +100,33 @@
 
         <div v-if="error" class="text-red-500 text-center">{{ error }}</div>
 
-        <!-- Current Session -->
-        
+        <!-- AFK Alert Modal -->
+        <div
+          v-if="showAfkAlert"
+          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+        >
+          <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h3 class="text-lg font-bold mb-4">No Activity Detected</h3>
+            <p class="mb-6">
+              You have been inactive for 3 minutes. Would you like to pause the
+              timer or continue?
+            </p>
+            <div class="flex justify-end space-x-4">
+              <button
+                @click="handleAfkPause"
+                class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition"
+              >
+                Pause
+              </button>
+              <button
+                @click="handleAfkContinue"
+                class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -125,6 +152,11 @@
             currentSession: null,
             screenshotInterval: null,
             error: null,
+            // AFK Detection
+            lastActivity: Date.now(),
+            afkCheckInterval: null,
+            showAfkAlert: false,
+            AFK_TIMEOUT: 30000
           };
         },
         created() {
@@ -136,6 +168,16 @@
             this.token = auth.token;
             this.isLoggedIn = true;
           }
+
+          // // Restore timer state if exists
+          this.restoreTimerState();
+        },
+        mounted() {
+          // Set up activity tracking only when timer is running
+          this.setupActivityTracking();
+        },
+        beforeDestroy() {
+          this.cleanupActivityTracking();
         },
         computed: {
           formatTime() {
@@ -148,6 +190,47 @@
           },
         },
         methods: {
+          // Activity Tracking Setup
+          setupActivityTracking() {
+            this.activityListeners = {
+              mousemove: this.updateLastActivity.bind(this),
+              keydown: this.updateLastActivity.bind(this),
+              click: this.updateLastActivity.bind(this),
+            };
+          },
+
+          // Start tracking user activity
+          startActivityTracking() {
+            if (this.isRunning && !this.isPaused) {
+              Object.entries(this.activityListeners).forEach(
+                ([event, listener]) => {
+                  document.addEventListener(event, listener);
+                }
+              );
+              this.startAfkDetection();
+            }
+          },
+
+          // Stop tracking user activity
+          stopActivityTracking() {
+            Object.entries(this.activityListeners).forEach(
+              ([event, listener]) => {
+                document.removeEventListener(event, listener);
+              }
+            );
+            if (this.afkCheckInterval) {
+              clearInterval(this.afkCheckInterval);
+              this.afkCheckInterval = null;
+            }
+            this.showAfkAlert = false;
+          },
+
+          // Cleanup all activity tracking
+          cleanupActivityTracking() {
+            this.stopActivityTracking();
+            this.activityListeners = null;
+          },
+
           async login() {
             try {
               const response = await fetch(`${API_URL}/api/v1/login`, {
@@ -183,6 +266,11 @@
             }
           },
           logout() {
+            // Save timer state before logout if timer is running
+            if (this.isRunning || this.isPaused) {
+              this.saveTimerState();
+            }
+
             this.isLoggedIn = false;
             this.user = null;
             this.token = null;
@@ -190,14 +278,18 @@
             localStorage.removeItem("auth");
             this.resetTimer();
           },
+          // Reset timer and cleanup
           resetTimer() {
             clearInterval(this.timer);
             clearInterval(this.screenshotInterval);
+            this.stopActivityTracking();
             this.time = 0;
             this.isRunning = false;
             this.isPaused = false;
             this.currentSession = null;
+            localStorage.removeItem("timerState");
           },
+          // Timer Control Methods
           async startTimer() {
             if (!this.isRunning && this.selectedTask) {
               try {
@@ -223,7 +315,11 @@
 
                 this.timer = setInterval(() => {
                   this.time++;
+                  this.saveTimerState();
                 }, 1000);
+
+                // Start activity tracking when timer starts
+                this.startActivityTracking();
 
                 // Take screenshot every 30 seconds
                 this.screenshotInterval = setInterval(async () => {
@@ -241,22 +337,67 @@
               clearInterval(this.screenshotInterval);
               this.isPaused = true;
               this.isRunning = false;
+              // Stop activity tracking when timer is paused
+              this.stopActivityTracking();
+              this.saveTimerState();
             }
           },
           resumeTimer() {
             if (this.isPaused) {
               this.isRunning = true;
               this.isPaused = false;
-              
+
               this.timer = setInterval(() => {
                 this.time++;
+                this.saveTimerState();
               }, 1000);
+
+              // Restart activity tracking when timer resumes
+              this.startActivityTracking();
 
               // Resume screenshot interval
               this.screenshotInterval = setInterval(async () => {
                 await this.takeScreenshot();
               }, 30000);
             }
+          },
+
+          // AFK Detection Methods
+          updateLastActivity() {
+            if (this.isRunning && !this.isPaused) {
+              this.lastActivity = Date.now();
+              if (this.showAfkAlert) {
+                this.handleAfkContinue();
+              }
+            }
+          },
+
+          startAfkDetection() {
+            if (this.afkCheckInterval) {
+              clearInterval(this.afkCheckInterval);
+            }
+
+            this.afkCheckInterval = setInterval(() => {
+              if (this.isRunning && !this.isPaused) {
+                const timeSinceLastActivity = Date.now() - this.lastActivity;
+                if (
+                  timeSinceLastActivity >= this.AFK_TIMEOUT &&
+                  !this.showAfkAlert
+                ) {
+                  this.showAfkAlert = true;
+                }
+              }
+            }, 1000);
+          },
+
+          handleAfkPause() {
+            this.showAfkAlert = false;
+            this.pauseTimer();
+          },
+
+          handleAfkContinue() {
+            this.showAfkAlert = false;
+            this.lastActivity = Date.now();
           },
           async stopTimer() {
             if (this.isRunning || this.isPaused) {
@@ -265,6 +406,9 @@
               try {
                 clearInterval(this.timer);
                 clearInterval(this.screenshotInterval);
+
+                // Stop activity tracking when timer stops
+                this.stopActivityTracking();
 
                 await fetch(`${API_URL}/api/v1/track-time`, {
                   method: "POST",
@@ -294,6 +438,33 @@
                 this.error = "Failed to stop session: " + error.message;
                 console.error("Error stopping session:", error);
               }
+            }
+          },
+
+          saveTimerState() {
+            const timerState = {
+              time: this.time,
+              isRunning: this.isRunning,
+              isPaused: this.isPaused,
+              selectedTask: this.selectedTask,
+              currentSession: this.currentSession,
+            };
+            localStorage.setItem("timerState", JSON.stringify(timerState));
+          },
+          restoreTimerState() {
+            const savedState = localStorage.getItem("timerState");
+            if (savedState) {
+              const state = JSON.parse(savedState);
+              this.time = state.time;
+              this.isRunning = false; // Always start paused when restored
+              this.isPaused = true;
+              this.selectedTask = state.selectedTask;
+              this.currentSession = state.currentSession;
+            }
+          },
+          handleWindowClose(event) {
+            if (this.isRunning || this.isPaused) {
+              this.pauseTimer();
             }
           },
           formatDuration(seconds) {
