@@ -20,6 +20,24 @@ function createWindow() {
   mainWindow.loadFile('index.html')
 }
 
+function getJakartaTimestamp() {
+  const jakartaTime = new Date().toLocaleString('en-US', { 
+    timeZone: 'Asia/Jakarta',
+  });
+  
+  const date = new Date(jakartaTime);
+  
+  // Format: YYYY-MM-DD-HH-mm-ss
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  return `${year}-${month}-${day}-${hours}-${minutes}-${seconds}`;
+}
+
 app.whenReady().then(createWindow)
 
 // Handler untuk mengambil screenshot
@@ -32,7 +50,8 @@ ipcMain.handle('capture-screenshot', async (event, sessionId) => {
     })
     
     const screenshot = sources[0].thumbnail.toDataURL()
-    const timestamp = new Date().getTime()
+    const timestamp = getJakartaTimestamp()
+    console.log('Generated timestamp:', timestamp)
     const tempPath = path.join(__dirname, 'temp', `screenshot-${timestamp}.png`)
     
     // Buat direktori temp jika belum ada
