@@ -101,30 +101,7 @@
           <p>Task: {{ selectedTask.name }}</p>
           <p>Duration: {{ formatDuration(time) }}</p>
         </div>
-
-        <!-- Session History -->
-        <div v-if="sessions.length > 0">
-          <h3 class="text-xl font-bold mb-4">Session History:</h3>
-          <div
-            v-for="(session, index) in sessions"
-            :key="session.id"
-            class="bg-white p-4 shadow-md rounded-md mb-4"
-          >
-            <p>Session {{ index + 1 }}</p>
-            <p>Task: {{ session.taskName }}</p>
-            <p>Duration: {{ formatDuration(session.duration) }}</p>
-            <div v-if="session.screenshots && session.screenshots.length">
-              <p>Screenshots: {{ session.screenshots.length }}</p>
-              <img
-                v-for="screenshot in session.screenshots"
-                :key="screenshot.id"
-                :src="`http://127.0.0.1:3000/${screenshot.path}`"
-                class="w-48 h-auto mt-2"
-                @error="handleImageError"
-              />
-            </div>
-          </div>
-        </div>
+        
       </div>
     </div>
 
