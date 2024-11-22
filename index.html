@@ -115,12 +115,14 @@
               <button
                 @click="handleAfkPause"
                 class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition"
+                :disabled="isAlertLocked"
               >
                 Pause
               </button>
               <button
                 @click="handleAfkContinue"
                 class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition"
+                :disabled="isAlertLocked"
               >
                 Continue
               </button>
@@ -156,7 +158,10 @@
             lastActivity: Date.now(),
             afkCheckInterval: null,
             showAfkAlert: false,
-            AFK_TIMEOUT: 3 * 60 * 1000, // 3 minutes in milliseconds
+            AFK_TIMEOUT: 3 * 60 * 1000, // 3 minutes
+            isAlertLocked: false, // New property to prevent instant dismissal
+            alertDismissTimeout: null, // New property for managing alert dismissal
+            afkPauseTime: null, // New property to track when AFK pause started
           };
         },
         created() {
@@ -313,6 +318,10 @@
                 this.isPaused = false;
                 this.error = null;
 
+                this.afkPauseTime = null; // Reset AFK pause time
+                this.showAfkAlert = false;
+                this.lastActivity = Date.now();
+
                 this.timer = setInterval(() => {
                   this.time++;
                   this.saveTimerState();
@@ -337,6 +346,8 @@
               clearInterval(this.screenshotInterval);
               this.isPaused = true;
               this.isRunning = false;
+              this.afkPauseTime = null; // Reset AFK pause time
+              this.showAfkAlert = false;
               // Stop activity tracking when timer is paused
               this.stopActivityTracking();
               this.saveTimerState();
@@ -362,12 +373,20 @@
             }
           },
 
-          // AFK Detection Methods
+          // Update last activity with improved alert handling
           updateLastActivity() {
-            if (this.isRunning && !this.isPaused) {
+            if (this.isRunning && !this.isPaused && !this.showAfkAlert) {
               this.lastActivity = Date.now();
-              if (this.showAfkAlert) {
-                this.handleAfkContinue();
+
+              // Only handle alert dismissal if alert is shown and not locked
+              if (this.showAfkAlert && !this.isAlertLocked) {
+                if (this.alertDismissTimeout) {
+                  clearTimeout(this.alertDismissTimeout);
+                }
+
+                this.alertDismissTimeout = setTimeout(() => {
+                  this.handleAfkContinue();
+                }, 2000);
               }
             }
           },
@@ -384,21 +403,66 @@
                   timeSinceLastActivity >= this.AFK_TIMEOUT &&
                   !this.showAfkAlert
                 ) {
+                  clearInterval(this.timer);
+                  this.afkPauseTime = Date.now();
                   this.showAfkAlert = true;
+                  this.isAlertLocked = true; // Lock the alert when it first appears
+
+                  // Unlock the alert after a short delay
+                  setTimeout(() => {
+                    this.isAlertLocked = false;
+                  }, 1500); // 1.5 second delay before allowing interaction
                 }
               }
             }, 1000);
           },
 
           handleAfkPause() {
-            this.showAfkAlert = false;
-            this.pauseTimer();
+            if (!this.isAlertLocked) {
+              this.showAfkAlert = false;
+              this.pauseTimer();
+              this.afkPauseTime = null;
+              // Reset alert related states
+              this.isAlertLocked = false;
+              if (this.alertDismissTimeout) {
+                clearTimeout(this.alertDismissTimeout);
+              }
+            }
           },
 
           handleAfkContinue() {
-            this.showAfkAlert = false;
-            this.lastActivity = Date.now();
+            if (!this.isAlertLocked) {
+              this.showAfkAlert = false;
+              this.lastActivity = Date.now();
+
+              // Resume the timer
+              if (this.afkPauseTime) {
+                this.timer = setInterval(() => {
+                  this.time++;
+                  this.saveTimerState();
+                }, 1000);
+                this.afkPauseTime = null;
+              }
+
+              // Reset alert related states
+              this.isAlertLocked = false;
+              if (this.alertDismissTimeout) {
+                clearTimeout(this.alertDismissTimeout);
+              }
+            }
           },
+
+          handleAutoAfkDismiss() {
+            if (this.showAfkAlert && !this.isAlertLocked) {
+              const shouldContinue = confirm("You're back! Continue timing?");
+              if (shouldContinue) {
+                this.handleAfkContinue();
+              } else {
+                this.handleAfkPause();
+              }
+            }
+          },
+
           async stopTimer() {
             if (this.isRunning || this.isPaused) {
               this.isRunning = false;
