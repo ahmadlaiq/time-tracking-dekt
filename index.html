@@ -81,9 +81,16 @@
             Pause
           </button>
           <button
+            @click="resumeTimer"
+            :disabled="!isPaused"
+            class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Resume
+          </button>
+          <button
             @click="stopTimer"
-            :disabled="!isRunning"
-            class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+            :disabled="!isRunning && !isPaused"
+            class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Stop
           </button>
@@ -92,15 +99,6 @@
         <div v-if="error" class="text-red-500 text-center">{{ error }}</div>
 
         <!-- Current Session -->
-        <div
-          v-if="currentSession"
-          class="bg-white p-4 shadow-md rounded-md mb-6"
-        >
-          <h3 class="text-lg font-bold">Current Session</h3>
-          <p>Session ID: {{ currentSession.id }}</p>
-          <p>Task: {{ selectedTask.name }}</p>
-          <p>Duration: {{ formatDuration(time) }}</p>
-        </div>
         
       </div>
     </div>
@@ -192,6 +190,14 @@
             localStorage.removeItem("auth");
             this.resetTimer();
           },
+          resetTimer() {
+            clearInterval(this.timer);
+            clearInterval(this.screenshotInterval);
+            this.time = 0;
+            this.isRunning = false;
+            this.isPaused = false;
+            this.currentSession = null;
+          },
           async startTimer() {
             if (!this.isRunning && this.selectedTask) {
               try {
@@ -219,10 +225,10 @@
                   this.time++;
                 }, 1000);
 
-                // Ambil screenshot setiap 30 detik
+                // Take screenshot every 30 seconds
                 this.screenshotInterval = setInterval(async () => {
                   await this.takeScreenshot();
-                }, 30000); // 30 detik
+                }, 30000);
               } catch (error) {
                 this.error = "Failed to start session: " + error.message;
                 console.error("Error starting session:", error);
@@ -234,6 +240,22 @@
               clearInterval(this.timer);
               clearInterval(this.screenshotInterval);
               this.isPaused = true;
+              this.isRunning = false;
+            }
+          },
+          resumeTimer() {
+            if (this.isPaused) {
+              this.isRunning = true;
+              this.isPaused = false;
+              
+              this.timer = setInterval(() => {
+                this.time++;
+              }, 1000);
+
+              // Resume screenshot interval
+              this.screenshotInterval = setInterval(async () => {
+                await this.takeScreenshot();
+              }, 30000);
             }
           },
           async stopTimer() {
@@ -258,7 +280,7 @@
                   }),
                 });
 
-                // Ambil screenshot terakhir
+                // Take final screenshot
                 await this.takeScreenshot();
 
                 this.sessions.unshift({
@@ -266,8 +288,7 @@
                   duration: this.time,
                 });
 
-                this.isRunning = false;
-                this.currentSession = null;
+                this.resetTimer();
                 this.error = null;
               } catch (error) {
                 this.error = "Failed to stop session: " + error.message;
