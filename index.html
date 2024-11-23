@@ -180,9 +180,18 @@
         mounted() {
           // Set up activity tracking only when timer is running
           this.setupActivityTracking();
+
+          // Check the time every minute
+          this.stopTimeInterval = setInterval(() => {
+            this.checkStopTime();
+          }, 60000); // Check every 60 seconds
         },
         beforeDestroy() {
           this.cleanupActivityTracking();
+
+          if (this.stopTimeInterval) {
+            clearInterval(this.stopTimeInterval);
+          }
         },
         computed: {
           formatTime() {
@@ -195,6 +204,21 @@
           },
         },
         methods: {
+          checkStopTime() {
+            const now = new Date();
+            const localTime = now.toLocaleString("en-US", {
+              timeZone: "Asia/Jakarta",
+            });
+            const localDateTime = new Date(localTime);
+
+            if (
+              localDateTime.getHours() === 15 &&
+              localDateTime.getMinutes() === 40
+            ) {
+              this.stopTimer();
+            }
+          },
+
           // Activity Tracking Setup
           setupActivityTracking() {
             this.activityListeners = {
